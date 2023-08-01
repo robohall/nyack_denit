@@ -1,0 +1,399 @@
+---
+title: "Denitrification in the Nyack Floodplain Aquifer"
+author:
+  - name: Robert O. Hall, Jr.
+    affiliation: Flathead Lake Bio Station, University of Montana
+  - name: Tyler Tappenbeck
+    affiliation: Flathead Lake Bio Station, University of Montana
+  - name: Geoff Poole
+    affiliation: Dept. of Land, Air, and Water Resources, Montana State University
+format: 
+    pdf
+editor: visual
+bibliography: references.bib
+csl: journal-of-geophysical-research.csl
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(scipen = 1, digits = 2)
+```
+
+```{r, echo=F, message=FALSE, warning=FALSE}
+library(lubridate)
+library(readr)
+library(tidyverse)
+library(lme4)
+library(ggplot2)
+library(ggExtra)
+
+```
+
+Flathead Lake Biological Station, University of Montana
+
+Dept. of Land, Air, and Water Resources, Montana State University
+
+# Code for \`\`Denitrification in an alluvial aquifer
+
+#Methods
+
+We assessed denitrification rates by using another method that measures oversaturation of N$_2$ gas relative to argon (Ar) an unreactive gas. Denitrification will produce excess N$_2$ gas, and the degree of excess is a function of the denitrification rate. We then related this oversaturation to the degree of undersaturation of O$_2$. We hypothesized that respiration of NO$_3$ should relate with respiration of O$_2$, albeit at lower rates, and indeed both within river chamber addition and across rivers, nitrate respiration scales with oxygen respiration [@Madinger_2019], thus we attempted this method here. We collected an extensive data set of samples from 16 wells in the floodplain (Fig. @fig-map) across 8 dates throughout the year. We collected water samples for dissolved gases as the above tracer experiments. We analyzed 6 replicate vials on separate runs of the MIMS without a furnace (for dissolved O$_2$) and with the O$_2$ trapping furnace (for dissolved N$_2$) in case of possible interference of O$_2$ on N$_2$ measures [@Eyre_2002]. At each date we also collected waster sample for dissolved organic carbon (DOC) and NO$_3^-$
+
+Given the N$_2$:Ar in any sample we needed to estimate the anomaly, which is the measured ratio relative to the ratio in the absence of biological activity, i.e., saturation concentrations. Temperature is a primary control on N$_2$: Ar, and typically one simply uses the temperature at sampling to compute \[N$_2$:Ar\]$_{sat}$ using standard equations [@hamme2004solubility]. But in groundwater, the exchange of gas with the atmosphere my be slow enough that it occurred well before the sampling date when the aquifer was at a different temperature. We estimated this equilibration temperature based on the absolute concentration of Ar in samples. We simply inversely solved the solubility equation to estimate Ar from temperature. Because the algebra is difficult to solve for temperature, we used function nlm() in R to solve for the saturation temperature given \[Ar\]. We then estimated the \[N$_2$:Ar\] anomaly as $\Delta [\text{N}_2:\text{Ar}]= [\text{N}_2:\text{Ar}] - [\text{N}_2:\text{Ar}]_{sat}$.
+
+To estimate a denitrification rate based on N$_2$ requires knowing the flux of N$_2$ production. This flux is easily measured in a closed system such as a bottle [@Madinger_2019] and it is possible to measure in an open system where gas exchange with the atmosphere is known [@Reisinger:2016kq]. In the case of the floodplain aquifer, gas exchange is unknown, despite strong evidence of O$_2$ exchange with the atmosphere [@Parker_nyack]. However, if we know the ratio of N$_2$ produced to O$_2$ consumed, and we know the flux of O$_2$ consumed, i.e., the respiration rate in the aquifer, we can solve for the rate of NO$_3$ respiration to N$_2$ gas [@Madinger_2019].
+
+To estimate the the ratio of N$_2$ produced to O$_2$ consumed, we used multilevel regression models where we regressed N$_2$ anomaly vs O$_2$ anomaly, using sampling dates and individual wells as grouping variables. This model had 3 levels. First was a measurement model, a within well model, and an among well model.
+
+Because we collected 6 samples for both \[N$_2$:Ar\] and \[O$_2$:Ar\] we can calculate and account for measurement error in the analyses. This model is \begin{equation}
+N_{s,d,w} = N_{d,w} + \varepsilon_{s,N}
+\end{equation}
+
+where $N$ is $\Delta [\mathrm{N}_2:\mathrm{Ar}]$ for sample, $s$ during date $d$ in well $w$. $N_{d,w}$ is the mean of the 6 samples for any date and well. $\varepsilon_{s,N}$ is random normally distributed variation with mean of 0 and standard deviation $\sigma_{s,N}$. We made the same measurement model for $\Delta [\mathrm{O}_2:\mathrm{Ar}]$,
+
+```{=tex}
+\begin{equation}
+O_{s,d,w} = O_{d,w} + \varepsilon_{s,O}
+\end{equation}
+```
+The next level was a within-well temporal model. \begin{equation}
+N_{d,w}= N_{w} + \varepsilon_{d,N}
+\end{equation} and \begin{equation}
+O_{d,w}= O_{w} + \varepsilon_{d,O}
+\end{equation}
+
+Contrary to our hypotheses, there was no strong relationship between $\Delta [\text{O}_2:\text{Ar}]$ and $\Delta [\text{N}_2:\text{Ar}]$ within any one well, hence the model simply was the mean value for each across all dates.
+
+The third level was regression of $$
+N_w = a + b + \varepsilon_w
+$$ {#eq-thirdlevel} where $a$ is the intercept and $b$ is the slope. $\varepsilon_w$ was the residual variation and was randomly distributed normal variation with mean = 0 and standard deviation $\sigma_w$. We are most interested in the value of $b$ as it represent the ratio of moles N produced for each mole of O$_2$ consumed.
+
+We fit these models using a Bayesian approach and used the program Stan to simulate the posterior distributions using Hamiltonian Monte Carlo algorithm. Priors for variance parameters were truncated normal distributions $\sigma_{d,O}\sim|normal(0,5)|$, all of the others were $\sim |normal(0,1)|$. $\sigma_{d,O}$ had higher prior expectations for variation because $\Delta [\text{O}_2:\text{Ar}]$ varies strongly with time in any one well. Prior on intercept $a$ was centered on zero based on the expectation that no respiration of O$_2$ would lead to no NO$_3^{-}$ respiration also, thus $a\sim normal(0,1)$, where the standard deviation of this distribution reflected the small amount of total variation one might see in $\Delta [\text{N}_2:\text{Ar}]$. The slope, $b$ had a weakly informative prior expectation based on findings from Madinger and Hall. At a concentration of NO$_3^{-}$ of 2 $\mu$mol L$^{-1}$ we would expect a ratio centered at 0.008. Given that the Nyack environmental conditions differ greatly from other sites in the summary figure in Madinger and Hall, we gave this slope a wider estimate or variation (0.05) to reflect lack of knowledge, thus the prior for $b$ was $b\sim(normal(0.008,0.05))$.
+
+We scaled this ratio of NO$_3$ respiration : aerobic respiration (slope, $b$) to denitrification based on modeled oxygen loss. @Helton:2012 estimated O$_2$ concentrations as a function of water residence time at Nyack, the slopes of these relationship thus represent a rough estimate of aerobic respiration. They fit Michaelis-Menten models to O$_2$ versus water residence time for 6 different dates. We estimated respiration as a function of oxygen concentration and bootstrapped parameter estimates for these 6 Michalis-Menten fits. We generated 1000 boostrapped estimates of respiration by randomly sampling a pair of $k_s$ and $R_{max}$ from the 6 respiration estimates in Helton and etimating respiration $R$ as $$R_{boot} = \frac{O_{boot}\times R_{max}}{k_s+O_{boot}}$$ where R is a vector of 1000 respiration estimates, $O_{boot}$ is a vector of of 1000 bootstrapped estimates of the mean dissolved O$_2$ concentrations from the 16 wells. $R_{max}$ is the maximal respiration rate and $k_s$ is the half-saturation constant for any of the 6 pairs of estimates from [@Helton:2012].
+
+Given an estimate of hyporheic respiration we can estimate the denitrification flux ($D$, mmolN$_2$ m$^{-3}$ d$^{-1}$) as simply \begin{equation}
+D = R_{boot}b
+\end{equation}
+
+where $b$ is 1000 samples from the probability distribution of $b$. We converted this flux into a rate (units, d$^{-1}$) as $K_{D} = D / N$, where $N$ was the bootstrapped mean \[NO$_3^{-}$\] from the 16 wells.
+
+## Process data
+
+```{r}
+#| echo: TRUE
+#| message: FALSE
+#| warning: FALSE
+
+source("/Users/bob.hall/Dropbox/Hyporheic_N_project/denit/mims_gas_functions.R")
+
+well_data<- read_csv("/Users/bob.hall/Dropbox/Hyporheic_N_project/denit/Full_Dataset.csv")
+
+
+chem_data<- read_csv("/Users/bob.hall/Dropbox/Hyporheic_N_project/denit/Nitrate_and_DOC.csv")
+chem_data<- chem_data %>% select(Location, Date, Analyte, ReportedResult)
+chem_data <- pivot_wider(chem_data, names_from=Analyte, values_from = ReportedResult)
+chem_data$DOC <- as.numeric (chem_data$DOC )
+chem_data$NO3<- as.numeric (chem_data$NO3 )
+chem_data$Date<-mdy(chem_data$Date)
+
+#get rid of standards
+
+well_data<- well_data %>% filter (!grepl("Std", Location))
+
+#calculate the previous temperature
+temp_ar<-function(ar, bp){
+  
+  minar<-function(P, ar, bp ) {
+    
+    ts<-log((298.15-P) / (273.15 + P))
+    a0<-2.79150
+    a1<-3.17609
+    a2<-4.13116
+    a3<-4.90379
+    
+    u<-10^(8.10765-(1750.286/(235+P)))
+    satar<-(exp(a0 + a1*ts + a2*ts^2 + a3*ts^3))*((bp-u)/(760-u))
+    arcalc<-watdens(P)*satar*(39.948/1000)##converts umol/kg to mg/L
+    (ar-arcalc)^2
+  }
+  
+  out<-nlm(minar, p=10, ar, bp)
+  out$estimate
+  
+}
+well_data$otemp<- NA
+
+for (i in 1:length(well_data$X40.Conc)){
+  well_data$otemp[i] <- temp_ar(well_data$X40.Conc[i], well_data$Pressure[i] )
+} 
+
+##calc previous N2:Ar sat and molar anomaly for both N2 and O2
+well_data$N.Ar_prevsat<- nsat( well_data$otemp,well_data$Pressure)/arsat( well_data$otemp,well_data$Pressure)
+well_data$Nar_anomaly <- (40/28)*(well_data$N2.Ar.Conc - well_data$N.Ar_prevsat)
+
+well_data$O2.Ar_prevsat <-  osat1( well_data$otemp,well_data$Pressure)/arsat( well_data$otemp,well_data$Pressure)
+well_data$Oar_anomaly <- (40/32)*(well_data$O2.Ar.Conc - well_data$O2.Ar_prevsat)
+
+well_furnace<- well_data[well_data$Furnace==1 & well_data$Leak==0,]
+well_nofurnace<- well_data[well_data$Furnace==0 & well_data$Leak==0,]
+
+
+##calculate means for report
+
+well_furnace_mean <- well_furnace %>% group_by(Location,Date) %>% 
+  summarize(f_OAr=mean(O2.Ar.Conc), f_NAr_anomaly=mean(Nar_anomaly), f_NAr=mean(N2.Ar.Conc), Temp = mean(Temp),
+            f_otemp=mean(otemp))
+
+                                                                                     
+
+well_nofurnace_mean <- well_nofurnace %>% group_by(Location,Date) %>% 
+  summarize(nf_OAr=mean(O2.Ar.Conc), nf_OAr_anomaly=mean(Oar_anomaly),  nf_NAr=mean(N2.Ar.Conc), nf_otemp=mean(otemp), nf_NAr_anomaly=mean(Nar_anomaly), oconc=X32.Conc  )
+
+
+well_mean_gas<- left_join ( well_furnace_mean, well_nofurnace_mean, by=c("Location", "Date"))
+well_mean_gas$Date <- mdy(well_mean_gas$Date)
+
+well_mean<- left_join (well_mean_gas, chem_data, by=c("Location", "Date") )
+
+
+##compare sample vs collection temps
+#ggplot(well_mean, aes(x = Temp, y =f_otemp)) + geom_point() +facet_wrap(~Location)
+
+#ggplot(well_mean, aes(x = nf_otemp, y =f_otemp)) + geom_point() +facet_wrap(~Location)
+
+well_mean_mean <- well_mean %>% group_by(Location) %>% summarize(nf_OAr_anomaly=mean(nf_OAr_anomaly),
+     f_NAr_anomaly=mean(f_NAr_anomaly) , NO3 = mean (NO3, na.rm=T), DOC = mean (DOC, na.rm=T), oconc = mean (oconc, na.rm=T) )       
+
+```
+
+## Run Stan model
+
+Note that I run this once and with subsequent runs load the wellfit object
+
+```{r}
+#| echo: TRUE
+#| message: FALSE
+#| warning: FALSE
+
+well_furnace_sel<-well_furnace %>% select(Location = Location, Date = StartDate, f_OAr=O2.Ar.Conc,f_NAr_anomaly=Nar_anomaly,
+                                          f_NAr=N2.Ar.Conc,  f_otemp=otemp, Temp=Temp)
+
+well_nofurnace_sel <- well_nofurnace %>% select(Location = Location, Date = StartDate, nf_OAr=O2.Ar.Conc,nf_NAr_anomaly=Nar_anomaly,
+                                                nf_NAr=N2.Ar.Conc, nf_OAr_anomaly=Oar_anomaly,  nf_otemp=otemp)
+
+
+well_sel <- left_join(well_furnace_sel %>% group_by(Location, Date) %>% mutate(id = row_number()),
+          well_nofurnace_sel %>% group_by(Location, Date) %>% mutate(id = row_number()), 
+          by = c("Location", "Date", "id"))
+
+
+well_sel$well_id <- well_sel%>% group_by(Location) %>%
+  group_indices() 
+
+well_sel$well_date_id <- well_sel%>% group_by(well_id, Date) %>%
+  group_indices() 
+
+
+well_sel_mean<- well_sel%>% group_by(Location, Date) %>% summarise() 
+well_sel_mean$well_id <- well_sel_mean%>% group_by(Location) %>%
+  group_indices() 
+
+####list for stan
+
+##need 2 data sets, ine for N and one for O because of NA due to 5 and not 6 samples collected
+well_sel_N<-well_sel[!is.na(well_sel$f_NAr_anomaly),  ]
+well_sel_O<-well_sel[!is.na(well_sel$nf_OAr_anomaly),  ]
+
+
+
+well_sel_data <- list(
+  NobsN = length(well_sel_N$f_NAr_anomaly),
+  NobsO = length(well_sel_O$f_NAr_anomaly),
+  Nwell_date= max(well_sel$well_date_id), 
+  Nwell = max(well_sel$well_id),
+  well_date_id_N = well_sel_N$well_date_id,
+  well_date_id_O = well_sel_O$well_date_id,
+  well_id = well_sel_mean$well_id , 
+  n2anomaly = well_sel_N$f_NAr_anomaly, 
+  o2anomaly = well_sel_O$nf_OAr_anomaly  )
+
+##run stan
+#wellfit <- stan("n2_int_o2_meas.stan", data = well_sel_data ,  iter = 2000, chains = 4)
+
+
+
+load(file="/Users/bob.hall/Dropbox/Hyporheic_N_project/denit/wellfit.R")
+wellmean_summary <- summary(wellfit, pars = c("wellmean","O2mean"), probs = c(0.5))$summary
+n_values <- wellmean_summary[1:16,4]
+o_values <- wellmean_summary[17:32,4]
+
+wellmean_slope <- summary(wellfit, pars = c("b"), probs = c(0.05,0.5, 0.95))$summary
+
+bsteps<- rstan::extract(wellfit, pars = "b")
+asteps<- rstan::extract(wellfit, pars = "a")
+
+
+
+```
+
+## Plot well level N2 Ar vs O2:Ar
+
+```{r}
+#| echo: TRUE
+#| label: fig-withinwell
+#| fig-cap: Within wells there  was no apparent relationship between $\Delta [\text{N}_2:\text{Ar}]$ and $\Delta [\text{O}_2:\text{Ar}]$. Panels represent indivual wells ampled 8 times.  Points are the mean of 6 analytiocal replicates.
+#| message: FALSE
+#| warning: FALSE
+
+##plot for report
+well_mean_plot<-ggplot(well_mean, aes(x = nf_OAr_anomaly, y =f_NAr_anomaly)) + geom_point() +facet_wrap(~Location)+
+xlab(expression( paste(Delta, " (O"[2],":Ar)" ))) + ylab(expression( paste(Delta, " (N"[2],":Ar)" ))) +
+  theme_bw()
+
+ggsave(filename="figures/well_mean_plot.pdf",
+       plot = well_mean_plot,
+       device = pdf,
+       width = 6,
+       height = 6,
+       units = "in")
+
+
+```
+
+## Plot among-well
+
+```{r}
+#| echo: FALSE
+#| label: fig-amongwell
+#| fig-cap: Mean dinitrogen concentration declined with oxygen across all wells.  Y axis is $\Delta [\mathrm{N}_2:\mathrm{Ar}]$ and X axis is $\Delta [\mathrm{O}_2:\mathrm{Ar}]$ Line is best fit from model in equation 1.  Light blue lines represent 100 samples from the joint posterior distribution of the intercept and slope.
+
+
+pdf(file="figures/N_O_plot.pdf", height = 2.5, width=3)
+par(mai=c(0.7,0.7,0.1,0.1), mgp=c(2,1,0))
+plot(n_values ~ o_values, xlab=expression( paste(Delta, " (O"[2],":Ar)" )),
+     ylab=expression( paste(Delta, " (N"[2],":Ar)" )), pch=16, col="blue" , xlim=c(-16,0)   )
+for(i in 1:1000){
+  lines(o_values, asteps$a[i] + bsteps$b[i]*as.numeric(o_values), col = alpha("lightblue", 0.1) )
+}
+points(n_values ~ o_values, pch=16)
+lines(o_values, median(asteps$a) + median(bsteps$b)*as.numeric(o_values))
+
+dev.off()
+
+```
+
+##Gather Helton's data, conduct the scaling
+
+```{r echo=TRUE, results='hide'}
+
+##Helton 2012 data
+#r<-c(0.16,0.1,0.07,0.08,0.12,0.18)/32
+umax<-c(0.32,0.14,0.23,0.19,0.16,0.37)/32
+ks<- c(4.28,4.31,4.53,4.34,4.35,5.08)/32
+mm_mat<- cbind(ks,umax)
+
+o_conc<-numeric(1000) ##convert to mols here
+for (i in 1:1000) {o_conc[i] <- mean(sample(well_mean_mean$oconc/32,16,replace=T)) }
+
+resp<-numeric(1000)
+for (i in 1:1000) {
+  mm<- numeric(8)
+    for (j in 1:8)  { 
+      row<- sample(nrow(mm_mat), 1, replace=T)
+      mm[j]<- o_conc[i]*mm_mat[row,2]/(mm_mat[row,1]+o_conc[i])
+    }
+  resp[i] <- mean(mm)
+}
+
+
+
+d<-bsteps$b[1:1000]
+
+d_flux<- resp*d  # the big scale.  Units mol m-3 d-1
+#hist (d_flux)
+
+n<-numeric(1000) #(n is nitrate N mg/L )
+for (i in 1:1000) {n[i] <- mean(sample(well_mean_mean$NO3,16,replace=T)) }
+mean(n/14)
+
+k<-d_flux*2 / (n/14)
+#hist(k)
+
+k_quantile<- quantile(k, c(0.05,0.5,0.95))
+d_flux_quantile <- quantile(-d_flux, c(0.05,0.5,0.95))
+
+d_flux_quantile*1000 #mmol m-3 d-1
+
+
+z<- 5  #m to bottom of wells
+por<- 0.3  #porosity 
+d_flux_quantile*1000*z*por #mmol m-2 d-1  The 0.3 is the water fraction
+d_flux_quantile*1000*z*por*14 #mg m-2 d-1
+d_flux_quantile*1000*z*por*14/24 #mg m-2 h-1
+
+
+d_flux_quantile*1000*z*por*365 #mmol m-2 y-1
+d_flux_quantile*1000*z*por*365*14/1000 #g m-2 y-1
+d_flux_quantile*1000*z*por*365*14*10000/(1000*1000) # kg ha-1 y-1
+
+
+lowk<- quantile(-k,0.05)
+midk<- quantile(-k,0.5)
+highk<- quantile(-k,0.95)
+
+k_hour<- -k/24
+
+kdf<- as.data.frame(k)
+
+##how much NO3 flows in mff in a day
+Q<-1000/35.2
+Q*86400*4/1000 #mol/d
+
+#Nyack area
+na<- 2*10*1e6 #m2
+d_flux_quantile*1000*por*z *na *0.001 # mol N floodplain each day
+```
+
+## Compare with LINX2 data
+
+```{r}
+#| echo: FALSE
+#| label: fig-linxcompare
+#| fig-cap: Denitrification measured as a rate of NO$_3$ uptake (1/d) in the Nyack aquifer (red density) was at the lowest region of 49 whole-stream estimates in the LINX2 study (Mulholland et al. 2008) (blue histogram).
+#| warning: false
+#| message: false
+
+linxK<- read.csv("/Users/bob.hall/Dropbox/Hyporheic_N_project/denit/linxK.csv")
+
+
+##Plot linxK
+linx_plot<-ggplot(linxK, aes(K*24 )) +              
+  geom_histogram(bins = 20, colour="black", fill="lightblue")  +
+  scale_x_log10( limits=c(0.01,101)) + 
+  #geom_vline(aes(xintercept=0.002),
+  #                           color="blue", linetype="solid", size=1) +
+  #geom_vline(aes(xintercept=lowk),
+  #           color="green", linetype="dashed", size=1)+
+  #geom_vline(aes(xintercept=midk),
+  #           color="blue", linetype="solid", size=1)+
+  #geom_vline(aes(xintercept=highk),
+   #          color="green", linetype="dashed", size=1)+
+  labs(x="Denitrification rate (1/d) ", y = "Count", "Legend") +
+  theme_classic()+
+  theme(text=element_text(size=15),  plot.margin = unit(c(1, 1, 1, 1), "cm"  ) )+
+  geom_density(data=kdf, aes(x=-k, y=0.003*..count..), alpha=0.3,colour="black", fill="red")+
+  annotate("text", x = 10, y = 4, label = "LINX2", col="lightblue", size =8)+
+    annotate("text", x = 0.02, y = 4, label = "Nyack", col="red", size =8, alpha=0.4)
+
+linx_plot
+
+ggsave(filename="figures/linx_plot.pdf",
+       plot = linx_plot,
+       device = pdf,
+       width = 6,
+       height = 5,
+       units = "in")
+
+
+```

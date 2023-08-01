@@ -1,0 +1,175 @@
+---
+title: "Furnace effect"
+author: "Robert Hall"
+date: "12/12/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Estimate the furnace effect while comparing measurement error and furnace bias
+
+Because we have 6 furnace and 6 no furnace samples from each well and date, we can compare the furnace effect as bias and error with sample to sample measurement error.  Here goes
+
+Data munging.  I have hidden this from the html report, you can see it in the .rmd.   It has lots of extraneous stuff that is part of our larger project at UM, and demonstrates my poor coding skills
+```{r, echo=F}
+
+
+library(tidyverse)
+source("mims_gas_functions.R")
+
+well_data<- read_csv("Full_Dataset.csv")
+
+chem_data<- read_csv("Nitrate_and_DOC.csv")
+chem_data<- chem_data %>% select(Location, Date, Analyte, ReportedResult)
+chem_data <- pivot_wider(chem_data, names_from=Analyte, values_from = ReportedResult)
+chem_data$DOC <- as.numeric (chem_data$DOC )
+chem_data$NO3<- as.numeric (chem_data$NO3 )
+
+quantile(chem_data$DOC, c(0.05, 0.5,0.95))
+
+#set NA to MDL
+
+chem_data$NO3[is.na(chem_data$NO3)] = 0.003
+
+#get rid of standards
+
+well_data<- well_data %>% filter (!grepl("Std", Location))
+
+#create a new factor for each combination of well and date
+
+#well_data$well_date_id<- as.numeric(factor(paste0(well_data$Location, well_data$StartDate)))
+
+#hist(well_data$well_date_id)
+
+
+#calculate the previous temperature
+temp_ar<-function(ar, bp){
+  
+  minar<-function(P, ar, bp ) {
+    
+    ts<-log((298.15-P) / (273.15 + P))
+    a0<-2.79150
+    a1<-3.17609
+    a2<-4.13116
+    a3<-4.90379
+    
+    u<-10^(8.10765-(1750.286/(235+P)))
+    satar<-(exp(a0 + a1*ts + a2*ts^2 + a3*ts^3))*((bp-u)/(760-u))
+    arcalc<-watdens(P)*satar*(39.948/1000)##converts umol/kg to mg/L
+    (ar-arcalc)^2
+  }
+  
+  out<-nlm(minar, p=10, ar, bp)
+  out$estimate
+  
+}
+well_data$otemp<- NA
+
+for (i in 1:length(well_data$X40.Conc)){
+  well_data$otemp[i] <- temp_ar(well_data$X40.Conc[i], well_data$Pressure[i] )
+} 
+
+##calc previous N2:Ar sat and molar anomaly for both N2 and O2
+well_data$N.Ar_prevsat<- nsat( well_data$otemp,well_data$Pressure)/arsat( well_data$otemp,well_data$Pressure)
+well_data$Nar_anomaly <- (40/28)*(well_data$N2.Ar.Conc - well_data$N.Ar_prevsat)
+
+well_data$O2.Ar_prevsat <-  osat1( well_data$otemp,well_data$Pressure)/arsat( well_data$otemp,well_data$Pressure)
+well_data$Oar_anomaly <- (40/32)*(well_data$O2.Ar.Conc - well_data$O2.Ar_prevsat)
+
+well_furnace<- well_data[well_data$Furnace==1 & well_data$Leak==0,]
+well_nofurnace<- well_data[well_data$Furnace==0 & well_data$Leak==0,]
+
+well_furnace_sel<-well_furnace %>% select(Location = Location, Date = StartDate, f_OAr=O2.Ar.Conc,f_NAr_anomaly=Nar_anomaly,
+                                          f_NAr=N2.Ar.Conc,  f_otemp=otemp, Temp=Temp)
+
+well_nofurnace_sel <- well_nofurnace %>% select(Location = Location, Date = StartDate, nf_OAr=O2.Ar.Conc,nf_NAr_anomaly=Nar_anomaly,
+                                                nf_NAr=N2.Ar.Conc, nf_OAr_anomaly=Oar_anomaly,  nf_otemp=otemp)
+
+
+well_sel <- left_join(well_furnace_sel %>% group_by(Location, Date) %>% mutate(id = row_number()),
+          well_nofurnace_sel %>% group_by(Location, Date) %>% mutate(id = row_number()), 
+          by = c("Location", "Date", "id"))
+
+
+well_sel$well_id <- well_sel%>% group_by(Location) %>%
+  group_indices() 
+
+well_sel$well_date_id <- well_sel%>% group_by(well_id, Date) %>%
+  group_indices() 
+
+
+well_sel_mean<- well_sel%>% group_by(Location, Date) %>% summarise() 
+well_sel_mean$well_id <- well_sel_mean%>% group_by(Location) %>%
+  group_indices() 
+
+####list for stan
+
+##need 2 data sets, ine for N and one for O because of NA due to 5 and not 6 samples collected
+well_sel_N<-well_sel[!is.na(well_sel$f_NAr_anomaly),  ]
+well_sel_O<-well_sel[!is.na(well_sel$nf_OAr_anomaly),  ]
+
+```
+
+## Take a look at all the data
+
+```{r}
+
+
+plot(well_sel$f_NAr,well_sel$nf_NAr, pch=16, cex=0.5, xlab="N2:Ar w/ furnace", ylab="N2:Ar no furnace" )
+
+```
+
+## Within sample variability
+mass ratios!
+
+```{r}
+
+meas_err <- well_sel %>% group_by(Location,Date) %>% summarise ( sd_f_NAr=sd(f_NAr, na.rm=T), sd_nf_NAr=sd(nf_NAr, na.rm=T),  mean_f_NAr=mean(f_NAr, na.rm=T), mean_nf_NAr=mean(nf_NAr, na.rm=T), mean_nf_OAr=mean(nf_OAr, na.rm=T)  )
+
+                                              
+
+
+mean(meas_err$sd_f_NAr)
+mean(meas_err$sd_nf_NAr)
+hist(meas_err$sd_f_NAr, breaks=20, xlab="SD of furnace N2:Ar reps")
+hist(meas_err$sd_nf_NAr, breaks=20,  xlab="SD of no furnace N2:Ar reps")
+
+```
+
+
+Standard deviotion of replicate samples in the furnace is `r  mean(meas_err$sd_f_NAr)` and for no furnace is `r mean(meas_err$sd_nf_NAr)`.  This value is roughly `r 100*mean(meas_err$sd_nf_NAr)/ mean(meas_err$mean_nf_NAr)`% variabilty.  Ok that is fairly small
+
+## Furnace effect
+
+Now we subtract the no furnace values of N2:Ar from the furnace to estimate a difference
+
+```{r}
+
+meas_err$Ndiff<-    meas_err$mean_f_NAr -    meas_err$mean_nf_NAr 
+
+hist(meas_err$Ndiff, breaks=40, xlab="Difference in furnace/no furnace N2:Ar")
+sd(meas_err$Ndiff)
+mean(meas_err$Ndiff)
+
+```
+
+The bias from the difference is `r mean(meas_err$Ndiff)` so very small showing no big bias.  Standard error on that value is `r sd(meas_err$Ndiff)/128^0.5`
+
+There is nonetheless a high amount of varibility.  Sd of the difference is `r sd(meas_err$Ndiff)`, which is almost double the within sample error.  I would caution blaming this all on the furnace itself.  These samples were run at a different day, if we split or samples and ran them the same  way a month apart we would have more error than what we get from 6 sequential samples squeezed between standards.
+
+### Could this variability be due to oxygen?
+
+```{r}
+
+plot ( meas_err$mean_nf_OAr, meas_err$Ndiff,  pch=16, ylab="Difference in furnace and no furnace N2:Ar", xlab= "O2:Ar")
+```
+
+I see no pattern of O2 causing the difference in furnace vs no furnace N.  This plot should go in the paper since it provides clear evidence against the Eyre idea that variation in O2 drives bias in N2:Ar.
+
+
+## Bottom line
+I see no bias from using the furnace.  The mean effect is tiny compared to replicate sample variation. And variation in this difference is unrelated with O2 (and itself small).
+
